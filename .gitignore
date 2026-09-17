@@ -1,0 +1,17 @@
+# Python virtualenv
+venv/
+__pycache__/
+*.pyc
+
+# Persian audio corpus (large, not for git) + nkululeko's own resampled siblings
+data/
+
+# nkululeko run byproducts: per-run log/ini snapshots (EXP.root/name default
+# to ./predict when a config doesn't set [EXP]) and verbose GPU run logs
+predict/
+scripts/predict/
+scripts/nkululeko_logs/
+
+# nkululeko resample --folder's plain (metadata-less) file list; superseded
+# by scripts/persian_nkululeko_data_16k.csv
+/resampled.csv

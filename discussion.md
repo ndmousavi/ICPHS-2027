@@ -81,3 +81,31 @@ what you have in the paper' figures is one datapoint per sample, right? I would 
 
 me: sure.  i guess i could extract the layer embeddings with nkululeko. as the facebook-.300 model has 24 layers, i would suggest to do this in 3-layer steps, i.e. 8 embedding sets per utterance
 
+That works, but two things to flag before you run it.
+
+First, "facebook-.300" is nkululeko's default alias for `wav2vec2` — it resolves to `facebook/wav2vec2-large-robust-ft-swbd-300h`, a 24-layer *ASR-fine-tuned* model (fine-tuned on Switchboard, English conversational telephone speech). That's a different model from the one already behind the Fig. 1c wav2vec2 embeddings, which are `facebook/wav2vec2-base` (12 layers, purely self-supervised, no fine-tuning, 768-dim). Switching models for the layer-wise analysis means:
+- you lose direct comparability with the existing Fig. 1c point — you'd be reporting "layer trajectory in model B" next to "single point from model A," which reviewers may flag
+- the fine-tuning objective is English ASR (CTC), which pushes later layers toward English phonetic/orthographic targets — for a Persian corpus that's an extra confound on top of the SSL-vs-linguistic story you're trying to tell. A plain self-supervised model (`wav2vec2-large-xlsr-53`, also 24 layers, 1024-dim, multilingual pretraining) would isolate the effect you actually want to claim. `wav2vec2-base` itself only has 12 layers, so if you want to stay consistent with what's already extracted, that's the simpler path and skips the model-choice question entirely — 12 layers in 1-layer or 2-layer steps instead of 3-layer steps on a 24-layer model.
+
+Second, nkululeko's layer-selection config is easy to get backwards. In `feats_wav2vec2.py`, `FEATS.wav2vec2.layer` is counted **from the top down**: the model is truncated to `num_hidden_layers - wav2vec2.layer` layers, and you get the output of that truncated stack. So `wav2vec2.layer = 0` (default) means the full model / last layer, and to get a specific layer L counting from the bottom on a 24-layer model, set `wav2vec2.layer = 24 - L`. For 3-layer steps (L = 3, 6, 9, 12, 15, 18, 21, 24) that's `wav2vec2.layer` values `21, 18, 15, 12, 9, 6, 3, 0` — worth double-checking against the HF config's `num_hidden_layers` for whichever model you land on, since the arithmetic is model-specific.
+
+One more practical blocker: the audio paths in the existing dataframes point to `/Users/neda/Documents/Corpus/Pertsch/persian/...`, which isn't reachable from this machine. Extraction needs either that corpus mounted/copied here or to run on the machine where it lives — worth sorting out before writing the 8 configs.
+
+me: first there's a new nkululeko version: 1.11.0 you got that? second: yes, using the xlsr-53 model is a good idea
+
+Checked — 1.11.0 is real, released 2026-09-17, PyPI's current `info.version`. Its one changelog entry ("introducing LODO — leave-one-database-out for multidb") doesn't touch feature extraction. I pulled the actual 1.11.0 wheel and diffed `feats_wav2vec2.py` against what I'd read before: byte-identical. So the layer-indexing gotcha stands as described — `FEATS.wav2vec2.layer` truncates `num_hidden_layers - layer` from the top, so for a bottom-up layer L you set `wav2vec2.layer = num_hidden_layers - L`.
+
+And confirmed `facebook/wav2vec2-large-xlsr-53`'s HF config: `num_hidden_layers = 24`, `hidden_size = 1024` — matches your "24 layers" and it's self-supervised only (CommonVoice + BABEL + multilingual LibriSpeech pretraining, no ASR fine-tuning), so it sidesteps the Switchboard-ASR confound from the earlier "facebook-.300" default. For 3-layer steps (L = 3, 6, 9, 12, 15, 18, 21, 24) on this model that's `wav2vec2.layer` = 21, 18, 15, 12, 9, 6, 3, 0.
+
+Still outstanding before this can actually run: audio access (the `/Users/neda/...` path issue above), and whether to keep `wav2vec2-base`'s existing Fig. 1c point as a separate reference or drop it now that the layer-wise analysis uses a different model.
+
+me: [data now available locally under data/persian] don't change the ipynb. We want nkululeko configurations for all layers in scripts, as well as a bash script to call them sequentially on a free GPU. don't run them yet! i'll do this in a tmux shell.
+
+me: wait. the scripts in nkulukeo_01 are most probably outdated
+
+Fair — cross-checked everything against the actual released 1.11.0 wheel from PyPI instead of the local checkout (both turned out identical for the modules that matter here).
+
+me: what's actually the best nkululeko module to extract the layer embeddings? i guess the predict module, right? [...] we want as result a csv file per layer with all pre-existing columns + the 768 cols for the embeddings
+
+Yes — `nkululeko.predict --list ... --type feats --model wav2vec2-large-xlsr-53 --config <layer ini>` is the right tool, not `explore`. `--list` mode preserves the input CSV's existing columns and appends `feat_0..feat_N` for the embedding, no `[DATA]`/`[MODEL]`/`[EXPL]` gymnastics needed — each layer config is just a one-line `[FEATS] wav2vec2.layer = N`. Two corrections along the way: (1) xlsr-53 is 1024-dim, not 768 (768 was the old wav2vec2-base run) — `feat_0..feat_1023` per layer. (2) Neither `predict` nor `explore`/`train`'s wav2vec2 extractor resamples audio — `explore` hard-asserts 16kHz and would crash outright, `predict` reads at native rate with no check and would silently produce embeddings computed on the wrong time axis. The corpus is natively 44.1kHz, so added a standalone `resample_to_16k.py` (plain torchaudio, no nkululeko dependency) as an explicit pre-step producing `data/persian_16k/` + `persian_nkululeko_data_16k.csv`, which `run_wav2vec2_layers.sh` now checks for before running any layer.
+
