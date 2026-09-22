@@ -1,6 +1,6 @@
-# ICPHS-2027
 
-# ICPhS 2027: Multidimensional Speaker Variation Across Speech Representations
+
+# ICPhS 2027: When representations change: Speaker variation across multidimensional spaces
 
 This repository contains the analysis code for our ICPhS 2027 study examining how observed speaker variability changes across different multidimensional speech representations.
 
