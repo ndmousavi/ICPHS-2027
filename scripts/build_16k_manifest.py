@@ -12,10 +12,12 @@ documented behaviour and would destroy the original 44.1kHz corpus. The
 --replace off reliably writes new "<name>_16kHz.wav" files next to the
 originals instead of overwriting them.
 
-This script just rewrites scripts/persian_nkululeko_data.csv to point at
-those "<name>_16kHz.wav" siblings (nkululeko's own naming convention, see
+This script rewrites scripts/<corpus>_nkululeko_data.csv to point at those
+"<name>_16kHz.wav" siblings (nkululeko's own naming convention, see
 Resampler.resample() in nkululeko/augmenting/resampler.py), keeping the same
 speaker/task columns, and fails loudly if any expected file is missing.
+
+Usage: python scripts/build_16k_manifest.py <corpus>   (e.g. persian, german)
 """
 
 import os
@@ -24,8 +26,6 @@ import sys
 import pandas as pd
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC_CSV = os.path.join(REPO_ROOT, "scripts", "persian_nkululeko_data.csv")
-DST_CSV = os.path.join(REPO_ROOT, "scripts", "persian_nkululeko_data_16k.csv")
 
 
 def sixteen_k_path(path):
@@ -33,7 +33,13 @@ def sixteen_k_path(path):
 
 
 def main():
-    df = pd.read_csv(SRC_CSV)
+    if len(sys.argv) != 2:
+        sys.exit("usage: python build_16k_manifest.py <corpus>  (e.g. persian, german)")
+    corpus = sys.argv[1]
+    src_csv = os.path.join(REPO_ROOT, "scripts", f"{corpus}_nkululeko_data.csv")
+    dst_csv = os.path.join(REPO_ROOT, "scripts", f"{corpus}_nkululeko_data_16k.csv")
+
+    df = pd.read_csv(src_csv)
     new_files = df["file"].apply(sixteen_k_path)
     missing = [f for f in new_files if not os.path.isfile(f)]
     if missing:
@@ -42,13 +48,13 @@ def main():
             print(f"  {f}", file=sys.stderr)
         print(
             "Did you run: python -m nkululeko.resample --folder "
-            f"{os.path.join(REPO_ROOT, 'data', 'persian')}  (without --replace)?",
+            f"{os.path.join(REPO_ROOT, 'data', corpus)}  (without --replace)?",
             file=sys.stderr,
         )
         sys.exit(1)
     df["file"] = new_files
-    df.to_csv(DST_CSV, index=False)
-    print(f"wrote {DST_CSV} ({len(df)} rows)")
+    df.to_csv(dst_csv, index=False)
+    print(f"wrote {dst_csv} ({len(df)} rows)")
 
 
 if __name__ == "__main__":
